@@ -1,19 +1,4 @@
-Skip to content
-This repository  
-Search
-Pull requests
-Issues
-Gist
- @bridgetj18
- Unwatch 9
-  Star 1
- Fork 0 team3408/2015-Robot
- Code  Issues 0  Pull requests 0  Wiki  Pulse  Graphs
-Branch: master Find file Copy path2015-Robot/RobotForCompV14
-2f00747  on Feb 17
-@stevecox1 stevecox1 Create RobotForCompV14
-1 contributor
-RawBlameHistory     497 lines (447 sloc)  14 KB
+
 /********************************************THIS CODE USES OUR NEW CONTROLLERS********************************************/
 /**********************************************STRING PUSHING MECHANISM ROBOT**********************************************/
 /************************************************USES ENCODERS TO SET MOTORS**********************************************/
