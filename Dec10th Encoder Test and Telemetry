@@ -1,0 +1,295 @@
+/********************************************THIS CODE USES OUR NEW CONTROLLERS********************************************/
+/**********************************************STRING PUSHING MECHANISM ROBOT**********************************************/
+/************************************************USES ENCODERS TO SET MOTORS**********************************************/
+
+//include libraries
+#include "WPILib.h"
+#include <iostream>
+#include <math.h>
+#include <AnalogInput.h>
+
+using namespace std;
+
+class Robot: public IterativeRobot
+{
+
+	//ultrasonic sensor stuff, total guess
+	AnalogInput *leftUltra;
+	AnalogInput *rightUltra;
+
+	//limitswitches for linear lift
+	DigitalInput *topLeftSwitch;
+	DigitalInput *bottomLeftSwitch;
+	DigitalInput *topRightSwitch;
+	DigitalInput *bottomRightSwitch;
+	DigitalInput *autonomousSwitch1;
+	DigitalInput *autonomousSwitch2;
+
+
+	//list of motors being used for driving
+	CANTalon frontLeftDrive;
+	CANTalon frontRightDrive;
+	CANTalon backLeftDrive;
+	CANTalon backRightDrive;
+
+	//motor for string mechanism
+	//CANTalon stringMotorLeft;
+	CANTalon stringMotorRight;
+
+	//list of motors on claws of doom
+	CANTalon leftClaw;
+	CANTalon rightClaw;
+
+	//the variable that controls the robot drive
+	RobotDrive myRobot; // robot drive system
+
+	//2 joysticks are used in competition
+	Joystick buttonStick;
+	Joystick driveStick;
+
+	//Int values
+	LiveWindow *lw;
+	int autoLoopCounter;
+	int functionNumber;
+	int claws = 60;
+	int highClaws = 100;
+	int pivotLeft = 50;
+	int pivotRight = 100;
+	int driveForwardLong = 50;
+	int driveForwardShort = 40;
+
+	//Encoders
+	Encoder *leftEnc = new Encoder(2,3, false, Encoder::EncodingType::k4X);
+	Encoder *rightEnc = new Encoder(4,5, false, Encoder::EncodingType::k4X);
+
+	//Encoder Stuff
+	float correction = 1;
+	double leftDist;
+	double rightDist;
+	double leftSpeed;
+	double rightSpeed;
+
+public:
+	Robot() :
+		//motors
+		frontLeftDrive(56),
+		frontRightDrive(52),
+		backLeftDrive(57),
+		backRightDrive(53),
+
+		//stringMotorLeft(54),
+		stringMotorRight(50),
+
+		//motor values
+		leftClaw(55),
+		rightClaw(51),
+
+		//we need to keep this because it is necessary for the whole robot to function
+		myRobot(0, 1),
+
+		//joysticks
+		buttonStick(0),
+		driveStick(1),
+
+		lw(NULL),
+		autoLoopCounter(0)
+
+	{
+		myRobot.SetExpiration(0.1);
+	}
+
+private:
+	void RobotInit()
+	{
+
+		leftUltra = new AnalogInput(0);
+		rightUltra = new AnalogInput(1);
+
+		//The code to initialize many of the inputs
+		topLeftSwitch = new DigitalInput(0);
+		bottomLeftSwitch = new DigitalInput(8);
+		topRightSwitch = new DigitalInput(1);
+		bottomRightSwitch = new DigitalInput(9);
+		autonomousSwitch1 = new DigitalInput(6);
+		autonomousSwitch2 = new DigitalInput(7);
+		lw = LiveWindow::GetInstance();
+		leftEnc->SetMaxPeriod(.1);
+		leftEnc->SetMinRate(10);
+		leftEnc->SetDistancePerPulse(5);
+		leftEnc->SetReverseDirection(true);
+		leftEnc->SetSamplesToAverage(7);
+		rightEnc->SetMaxPeriod(.1);
+		rightEnc->SetMinRate(10);
+		rightEnc->SetDistancePerPulse(5);
+		rightEnc->SetReverseDirection(true);
+		rightEnc->SetSamplesToAverage(7);
+	}
+
+	void AutonomousInit()
+	{
+
+	}
+
+	void AutonomousPeriodic()
+	{
+		//setting all values to zero
+
+		leftClaw.Set(0);
+		rightClaw.Set(0);
+		frontLeftDrive.Set(0);
+		frontRightDrive.Set(0);
+		backLeftDrive.Set(0);
+		backRightDrive.Set(0);
+		autoLoopCounter++;
+
+	}
+
+	void TeleopInit()
+	{
+		SmartDashboard::init();
+
+	}
+
+	void TeleopPeriodic()
+	{
+		//ultrasonic
+		SmartDashboard::PutNumber("Left Ultrasonic", leftUltra->GetValue());
+		SmartDashboard::PutNumber("Right Ultrasonic", rightUltra->GetValue());
+
+		//sets up encoders
+		leftDist = leftEnc->GetDistance();
+		rightDist = rightEnc->GetDistance();
+		leftSpeed = leftEnc->GetRate();
+		rightSpeed = rightEnc->GetRate();
+
+		// displaying encoders
+		SmartDashboard::PutString("DB/String 0","TEST")
+		SmartDashboard::PutNumber("Left Encoder Value", leftDist);
+		SmartDashboard::PutNumber("Right Encoder Value", rightDist);
+
+		//speed to move string motor
+		float stringMech;
+
+		//boolean to allow the two claw motors to be synchronized
+		bool motorInd = buttonStick.GetRawButton(5);
+
+		//axes that determine the speed of the string motor
+		float stringPusher = buttonStick.GetRawAxis(2);
+		float stringReturn = buttonStick.GetRawAxis(3);
+
+		//sets the string return value to a negative number
+		stringReturn = -stringReturn;
+
+		//determines whether to move the string motor in or out
+		if (buttonStick.GetRawAxis(2)){
+			stringMech = stringPusher;		}
+		else if (buttonStick.GetRawAxis(3)){
+			stringMech = stringReturn;
+		}
+		else {
+			stringMech = 0;
+		}
+
+		//variables that control the speed of the motors on each side, because we are running tank drive, we only need two
+		float driveLeft = driveStick.GetRawAxis(1);
+		float driveRight = driveStick.GetRawAxis(3);
+
+		//divide by 2 so that we don't go too fast.  Also allows us to enable slow and fast modes
+		driveLeft = driveLeft/2;
+		driveRight = driveRight/2;
+
+		//allows us to control the claws using axes so that we have manual control over them
+		float clawMoveRight = buttonStick.GetRawAxis(5);
+		float clawMoveLeft = buttonStick.GetRawAxis(1);
+
+		//has the motors move together in a synchronized manner
+		if (motorInd){
+			clawMoveLeft = clawMoveRight;
+		}
+
+		//true or false variables that allow us to change the speed when the buttons are held down
+		bool slow = driveStick.GetRawButton(7);
+		bool fast = driveStick.GetRawButton(8);
+
+		//an if, else if statement that controls when the boolean buttons are pressed so that we can change the driving speeds
+		if (slow){
+			driveLeft = driveLeft/2;
+			driveRight = driveRight/2;
+		}
+		else if (fast){
+			driveLeft = driveLeft*2;
+			driveRight = driveRight*2;
+		}
+
+		//if statement for the limit switches that make sure that all ball screws are moving at the same rate
+		if (topLeftSwitch->Get() == 0 && clawMoveLeft < 0){
+			clawMoveLeft = 0;
+			leftEnc->Reset();
+		}
+		else if (bottomLeftSwitch->Get() == 0 && clawMoveLeft > 0){
+			clawMoveLeft = 0;
+		}
+		if (topRightSwitch->Get() == 0 && clawMoveRight < 0) {
+			clawMoveRight = 0;
+			rightEnc->Reset();
+		}
+		else if (bottomRightSwitch->Get() == 0 && clawMoveRight > 0) {
+			clawMoveRight = 0;
+		}
+
+		if(stringMech != 0){
+			driveLeft = 0;
+			driveRight = 0;
+		}
+
+		//allows us to sense the rate that the encoders are sensing that the ball screw is moving at
+		double rateLeft = leftEnc->GetRate();
+		double rateRight = rightEnc->GetRate();
+
+		//individually set all the motors with values because we do not have chains so we can't use the tank drive functions
+		frontLeftDrive.Set(-driveLeft);
+		frontRightDrive.Set(driveRight);
+		backLeftDrive.Set(-driveLeft);
+		backRightDrive.Set(-driveRight);
+
+		//sets value of string motor
+		stringMotorRight.Set(-stringMech);
+
+		//booleans that allow us to control the ball screw claws to go faster or slower on command
+		bool slowClaw = buttonStick.GetRawButton(6);
+		bool fastClawRight = buttonStick.GetRawButton(10);
+		bool fastClawLeft = buttonStick.GetRawButton(9);
+
+		//an in statement that controls the booleans above
+		if (slowClaw){
+			clawMoveLeft = clawMoveLeft/2;
+			clawMoveRight = clawMoveRight/2;
+		}
+		else if(fastClawRight && fastClawLeft){
+			clawMoveRight = clawMoveRight*2;
+			clawMoveLeft = clawMoveLeft*2;
+		}
+
+
+		//sets the values of the claw motors independently so they can be run at different values if the driver chooses to do that
+		float leftClawFinal= -clawMoveLeft*.55;
+		float rightClawFinal= -clawMoveRight*.6;
+
+		//set values
+		leftClaw.Set(leftClawFinal);
+		rightClaw.Set(rightClawFinal);
+
+		// displaying claw values
+		SmartDashboard::PutNumber("Left Claw Value", leftClawFinal);
+		SmartDashboard::PutNumber("Right Claw Value", rightClawFinal);
+
+	}
+
+
+	void TestPeriodic()
+	{
+		lw->Run();
+	}
+};
+
+START_ROBOT_CLASS(Robot);
